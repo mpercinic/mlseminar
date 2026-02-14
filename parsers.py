@@ -1,4 +1,4 @@
-def expr_to_scipy(expr):
+def expr_to_scipy(expr, method, bounds):
     code = 'res = minimize(lambda c: np.mean((' # TODO: add root?
     const_counter = 0
     for c in expr:
@@ -17,9 +17,11 @@ def expr_to_scipy(expr):
         elif c[:2] == 'X_':
             code += 'x_train[' + str(c[2:]) + ']'
         else: code += c
-    return code + '-y_train)**2), [c.item() for c in cs])'
+    code += '-y_train)**2), [c.item() for c in cs], method=' + method
+    if bounds is not None: code += ', bounds=' + bounds
+    return code + ')'
 
-def expr_to_tensor(expr, constants):
+def expr_to_tensor(expr):
     code = 'predicted = '
     const_counter = 0
     for c in expr:
@@ -33,7 +35,7 @@ def expr_to_tensor(expr, constants):
         elif c == '^2': code += '**2'
         elif c == '^3': code += '**3'
         elif c[:2] == 'C_':
-            code += constants + '[' + str(const_counter) + ']'
+            code += 'cs1[' + str(const_counter) + ']'
             const_counter += 1
         elif c[:2] == 'X_':
             code += 'x_train[' + str(c[2:]) + ']'
@@ -57,7 +59,7 @@ def expr_to_code(expr):
             code += 'cs[' + str(const_counter) + '].item()'
             const_counter += 1
         elif c[:2] == 'X_':
-            code += 'x_train[' + str(c[2:]) + ']'
+            code += 'np.transpose(dataset["X"])[' + str(c[2:]) + ']'
         else: code += c
     return code
 
@@ -83,7 +85,7 @@ def scipy_test_evaluation(expr):
     return code
 
 def torch_test_evaluation(expr):
-    code = 'predicted = '
+    code = 'prediction = '
     const_counter = 0
     for c in expr:
         if c == 'sqrt': code += 'torch.sqrt'

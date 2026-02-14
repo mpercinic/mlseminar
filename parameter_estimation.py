@@ -2,10 +2,16 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn as nn
+import pandas as pd
 from torch.utils.data import Dataset, DataLoader
 import random
 from SRToolkit.evaluation import ParameterEstimator
 from scipy.optimize import minimize
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split, GridSearchCV, KFold
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from load_dataset import datasets
 from parsers import *
 
@@ -40,20 +46,20 @@ class SimpleNN(nn.Module):
 
     def get_architecture(self):
         """Print the network architecture"""
-        print(f"\n{'=' * 50}")
+        '''print(f"\n{'=' * 50}")
         print(f"Regression Neural Network Architecture")
         print(f"{'=' * 50}")
         print(f"Input size: {self.input_size}")
-        print(f"Number of hidden layers: {self.num_hidden_layers}")
+        print(f"Number of hidden layers: {self.num_hidden_layers}")'''
 
         current_size = self.input_size
         for i in range(self.num_hidden_layers):
             next_size = max(1, current_size // 2)
-            print(f"Hidden Layer {i + 1}: {current_size} -> {next_size} (ReLU)")
+            #print(f"Hidden Layer {i + 1}: {current_size} -> {next_size} (ReLU)")
             current_size = next_size
 
-        print(f"Output Layer: {current_size} -> {self.output_size}")
-        print(f"{'=' * 50}\n")
+        #print(f"Output Layer: {current_size} -> {self.output_size}")
+        #print(f"{'=' * 50}\n")
 
 
 class RegressionDataset(Dataset):
@@ -70,7 +76,7 @@ class RegressionDataset(Dataset):
         return self.X[idx], self.y[idx]
 
 
-def train_model(model, train_loader, criterion, optimizer, num_epochs=100, verbose=True):
+def train_model(model, train_loader, criterion, optimizer, num_epochs=100, verbose=False):
     """
     Train the regression model
 
@@ -122,105 +128,68 @@ def evaluate_model(model, test_loader, criterion):
         for batch_X, batch_y in test_loader:
             outputs = model(batch_X)
             loss = criterion(outputs, batch_y.unsqueeze(1) if batch_y.dim() == 1 else batch_y)
-            total_loss += loss.item()
+            total_loss += loss
 
     avg_loss = total_loss / len(test_loader)
     return avg_loss
 
-np.random.seed(42)
-
-num_epochs = 2000
-train_test_split = 0.7
-
-first = True
-for dataset in datasets:
-    '''if first:
-        first = False
-        continue'''
-    # data preparation
-    n_const = dataset["num_constants"]
-    c_min, c_max = dataset["kwargs"]["constant_range"]
-    X = np.transpose(dataset["X"])
-    x_train, x_test = X[:, :int(train_test_split*X.shape[1])], X[:, int(train_test_split*X.shape[1]):]
-    y = np.transpose(dataset["y"])
-    y_train, y_test = y[:int(train_test_split*len(y))], y[int(train_test_split*len(y)):]
-    c0_1 = np.random.rand(n_const)
-    cs = [c_min + (c_max - c_min) * c0_1[i] for i in range(n_const)]
-    #cs = [torch.tensor(c_min + (c_max - c_min) * c0_1[i], requires_grad=True) for i in range(n_const)]
-    exec(expr_to_code(dataset["expression"]))
-    while np.isnan(rhs).any():
-        c0_1 = np.random.rand(n_const)
-        cs = [c_min + (c_max - c_min) * c0_1[i] for i in range(n_const)]
-        exec(expr_to_code(dataset["expression"]))
-    print(cs)
-
-
-    print(dataset["ground_truth"])
-    #print(dataset["expression"])
-
-    print("Scipy minimize results:")
-    exec(expr_to_scipy(dataset["expression"]))
+def run_optimization(method, bounds):
+    #print("Scipy minimize results:")
+    #print(expr_to_scipy(dataset["expression"], method, bounds))
+    '''res = minimize(lambda c: np.mean(
+        ((x_train[2] + x_train[1]) / (c[0] + (x_train[2] * x_train[1]) / (x_train[0] ** 2)) - y_train) ** 2),
+                   [c.item() for c in cs], method='Nelder-Mead', bounds=[(-5, 5) for _ in range(n_const)])'''
+    '''print(cs)
+    print(expr_to_scipy(dataset["expression"], method, bounds))'''
+    exec(expr_to_scipy(dataset["expression"], method, bounds), globals())
     print(res.message)
-    print("Values of the parameters: " + str(res.x))
+    '''print("Values of the parameters: " + str(res.x))
     print("Number of evaluations: " + str(res.nfev))
-    print("Error: " + str(res.fun))
-    exec(scipy_test_evaluation(dataset["expression"]))
-    print("Test error: " + str(np.mean((rhs - y_test)**2)))
-    print()
+    print("Error: " + str(res.fun))'''
+    exec(scipy_test_evaluation(dataset["expression"]), globals())
+    '''print(rhs)
+    print("Test error: " + str(np.mean((rhs - y_test) ** 2)))
+    print()'''
+    #print(np.isnan(rhs).any())
+    return np.sqrt(mean_squared_error(y_test, rhs)), mean_absolute_error(y_test, rhs), r2_score(y_test, rhs)
 
-    # comp graphs just comparing rhs
+def run_comp_graph(x_train, x_test, y_train, y_test, cs):
     x_train = torch.tensor(x_train)
     y_train = torch.tensor(y_train)
 
     cs1 = [torch.tensor(c, requires_grad=True) for c in cs]
     optimizer = optim.Adam(cs1, lr=0.001)
-    for epoch in range(num_epochs):
+    for epoch in range(num_epochs_cg):
         optimizer.zero_grad()
-        exec(expr_to_tensor(dataset["expression"], 'cs1'))
+        print(expr_to_tensor(dataset["expression"]))
+        exec('predicted = (x_train[2] + x_train[1]) / (cs1[0] + (x_train[2] * x_train[1]) / (x_train[0] ** 2))', globals(), {'cs1': cs1})
+        #exec(expr_to_tensor(dataset["expression"]), globals(), {'cs1': cs1})
         loss = torch.mean((predicted - y_train) ** 2)
         loss.backward()
         optimizer.step()
-    print("Computational graph results:")
-    print("Values of the parameters: " + str([c.item() for c in cs]))
-    print("Values of the parameters: " + str([c.item() for c in cs1]))
-    print("Number of evaluations: " + str(num_epochs))
-    print("Error: " + str(loss.item()))
+    #print("Computational graph results:")
+    #print("Values of the parameters: " + str([c.item() for c in cs]))
+    #print("Values of the parameters: " + str([c.item() for c in cs1]))
+    #print("Number of evaluations: " + str(num_epochs_cg))
+    #print("Error: " + str(loss.item()))
 
     # TODO: add evaluation for test data
     x_test = torch.tensor(x_test)
     y_test = torch.tensor(y_test)
-    exec(torch_test_evaluation(dataset["expression"]))
-    print("Test error: " + str(torch.mean((predicted - y_test)**2).item()))
+    exec(torch_test_evaluation(dataset["expression"]), globals())
+    return np.sqrt(mean_squared_error(y_test, predicted)), mean_absolute_error(y_test, predicted), r2_score(y_test, predicted)
 
-    #comp graphs for rhs and parameters
-    # can't use parameters because that is what we are searching -> not a standard machine learning task
-
-    '''cs2 = [torch.tensor(c, requires_grad=True) for c in cs]
-    constants = torch.tensor(dataset["constants"], requires_grad=True)
-    optimizer = optim.Adam(cs2, lr=0.001)
-    for epoch in range(num_epochs):
-        optimizer.zero_grad()
-        exec(expr_to_tensor(dataset["expression"], 'cs2'))
-        se = torch.stack([(cs2[i] - dataset["constants"][i]) ** 2 for i in range(len(cs2))])
-        loss = torch.mean(se)
-        loss.backward()
-        optimizer.step()
-    print("Computational graph results:")
-    print("Values of the parameters: " + str([c.item() for c in cs]))
-    print("Values of the parameters: " + str([c.item() for c in cs2]))
-    print("Number of evaluations: " + str(num_epochs))
-    print("Error: " + str(torch.mean((predicted - y_train) ** 2).item()))'''
-
+def run_nn():
     # SimpleNN
-    train_dataset = RegressionDataset(torch.transpose(x_train, 0, 1), y_train)
-    test_dataset = RegressionDataset(torch.transpose(x_test, 0, 1), y_test)
+    train_dataset = RegressionDataset(x_train, y_train)
+    test_dataset = RegressionDataset(x_test, y_test)
 
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
     # Create model with 10 input nodes and 3 hidden layers
     # Architecture will be: 10 -> 5 -> 2 -> 1 (output always 1 node)
-    model = SimpleNN(input_size=X.shape[0], num_hidden_layers=1)
+    model = SimpleNN(input_size=x_train.shape[1], num_hidden_layers=max([int(x_train.shape[1]/2), 1]))
     model.get_architecture()
 
     # Define loss function and optimizer
@@ -228,19 +197,144 @@ for dataset in datasets:
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     # Train the model
-    print("Training the model...")
-    train_model(model, train_loader, criterion, optimizer, num_epochs=num_epochs, verbose=True)
+    #print("Training the model...")
+    train_model(model, train_loader, criterion, optimizer, num_epochs=num_epochs_nn)
 
     # Evaluate the model
-    test_loss = evaluate_model(model, test_loader, criterion)
-    print(f'\nTest Loss: {test_loss:.4f}')
+    rmse_loss = np.sqrt(evaluate_model(model, test_loader, mean_squared_error))
+    mae_loss = evaluate_model(model, test_loader, mean_absolute_error)
+    r2_loss = evaluate_model(model, test_loader, r2_score)
 
-    # Make a prediction on a single sample
-    sample_input = torch.FloatTensor(x_test[0:1])
-    prediction = model(sample_input)
-    print(f'\nSample Prediction: {prediction.item():.4f}')
-    print(f'Actual Value: {y_test[0]:.4f}')
-    input()
+    return rmse_loss, mae_loss, r2_loss
+
+def run_rand_forest():
+    '''grid_search = GridSearchCV(RandomForestRegressor(max_features='log2'), param_grid=rand_forest_params, cv=5)
+    grid_search.fit(x_train, y_train)
+    print("Best Parameters:", grid_search.best_params_)
+    print("Best Estimator:", grid_search.best_estimator_)
+    results_df = pd.DataFrame(grid_search.cv_results_)
+    results_df = results_df.sort_values(by=["rank_test_score"])
+    results_df = results_df.set_index(
+        results_df["params"].apply(lambda x: "_".join(str(val) for val in x.values()))
+    ).rename_axis("kernel")
+    print(results_df[["params", "rank_test_score", "mean_test_score", "std_test_score"]].to_string())'''
+
+    rf_model = RandomForestRegressor(max_features='log2', n_estimators=50)
+    rf_model.fit(x_train, y_train)
+    y_pred = rf_model.predict(x_test)
+    return np.sqrt(mean_squared_error(y_test, y_pred)), mean_absolute_error(y_test, y_pred), r2_score(y_test, y_pred)
+
+def run_knn():
+    scaler = StandardScaler()
+    x_train_scaled = scaler.fit_transform(x_train)
+    x_test_scaled = scaler.transform(x_test)
+    knn_model = KNeighborsRegressor(n_neighbors=5, weights='distance')
+    knn_model.fit(x_train_scaled, y_train)
+    y_pred = knn_model.predict(x_test_scaled)
+    return np.sqrt(mean_squared_error(y_test, y_pred)), mean_absolute_error(y_test, y_pred), r2_score(y_test, y_pred)
+
+np.random.seed(42)
+
+num_epochs_nn = 1000
+num_epochs_cg = 2000
+test_size = 0.3
+
+rand_forest_params = {
+    'n_estimators': [20, 50, 100, 150, 200],
+    'max_depth': [None, 5, 10, 15],
+    'min_samples_split': [2, 5, 10],
+    'min_samples_leaf': [1, 2, 5],
+    'bootstrap': [True, False]
+}
+
+for dataset in datasets:
+    # data preparation
+    n_const = dataset["num_constants"]
+    c_min, c_max = dataset["kwargs"]["constant_range"]
+    c0_1 = np.random.rand(n_const)
+    cs = [c_min + (c_max - c_min) * c0_1[i] for i in range(n_const)]
+    #cs = [torch.tensor(c_min + (c_max - c_min) * c0_1[i], requires_grad=True) for i in range(n_const)]
+    print(dataset["ground_truth"])
+    exec(expr_to_code(dataset["expression"]))
+    while np.isnan(rhs).any():
+        c0_1 = np.random.rand(n_const)
+        cs = [c_min + (c_max - c_min) * c0_1[i] for i in range(n_const)]
+        exec(expr_to_code(dataset["expression"]))
+
+    # print(dataset["expression"])
+
+    kf = KFold(n_splits=5, random_state=42, shuffle=True)
+    rf_results = []
+    knn_results = []
+    nm_results = []
+    lbfgsb_results = []
+    slsqp_results = []
+    comp_graph_results = []
+    nn_results = []
+
+    '''grid_search = GridSearchCV(RandomForestRegressor(max_features='log2'), param_grid=rand_forest_params, cv=5)
+    grid_search.fit(dataset["X"], dataset["y"])
+    print("Best Parameters:", grid_search.best_params_)
+    #print("Best Estimator:", grid_search.best_estimator_)
+    results_df = pd.DataFrame(grid_search.cv_results_)
+    results_df = results_df.sort_values(by=["rank_test_score"])
+    results_df = results_df.set_index(
+        results_df["params"].apply(lambda x: "_".join(str(val) for val in x.values()))
+    ).rename_axis("kernel")
+    #print(results_df[["params", "rank_test_score", "mean_test_score", "std_test_score"]].to_string())
+    #input()'''
+
+    for i, (train_index, test_index) in enumerate(kf.split(dataset["X"])):
+        x_train, x_test = dataset["X"][train_index], dataset["X"][test_index]
+        y_train, y_test = dataset["y"][train_index], dataset["y"][test_index]
+
+        rf_results.append(run_rand_forest())
+        knn_results.append(run_knn())
+        #nn_results.append(run_nn())
+        x_train, x_test = np.transpose(x_train), np.transpose(x_test)
+        nm_results.append(run_optimization("'Nelder-Mead'", '[(-5, 5) for _ in range(n_const)]'))
+        lbfgsb_results.append(run_optimization("'L-BFGS-B'", '[(-5, 5) for _ in range(n_const)]'))
+        slsqp_results.append(run_optimization("'SLSQP'", '[(-5, 5) for _ in range(n_const)]'))
+        #comp_graph_results.append(run_comp_graph(x_train, x_test, y_train, y_test, cs))
+
+        x_train = torch.tensor(x_train)
+        y_train = torch.tensor(y_train)
+
+        cs1 = [torch.tensor(c, requires_grad=True) for c in cs]
+        print(cs1)
+        optimizer = optim.Adam(cs1, lr=0.0001)
+        for epoch in range(num_epochs_cg):
+            optimizer.zero_grad()
+            #exec('predicted = (x_train[2] + x_train[1]) / (cs1[0] + (x_train[2] * x_train[1]) / (x_train[0] ** 2))', globals())
+            exec(expr_to_tensor(dataset["expression"]), globals())
+            loss = torch.mean((predicted - y_train) ** 2)
+            print(loss)
+            if loss < 1e-12: break
+            #print(loss.item())
+            loss.backward()
+            optimizer.step()
+        # print("Computational graph results:")
+        # print("Values of the parameters: " + str([c.item() for c in cs]))
+        # print("Values of the parameters: " + str([c.item() for c in cs1]))
+        # print("Number of evaluations: " + str(num_epochs_cg))
+        # print("Error: " + str(loss.item()))
+
+        # TODO: add evaluation for test data
+        x_test = torch.tensor(x_test)
+        y_test = torch.tensor(y_test)
+        print(cs1)
+        exec(torch_test_evaluation(dataset["expression"]), globals())
+        print(prediction)
+        comp_graph_results.append((np.sqrt(mean_squared_error(y_test, prediction)), mean_absolute_error(y_test, prediction), r2_score(y_test, prediction)))
+
+        '''run_optimization()
+        run_comp_graph(x_train, x_test, y_train, y_test)
+        run_nn()'''
+
+    for res in [rf_results, knn_results, nm_results, lbfgsb_results, slsqp_results, comp_graph_results]:
+        res = np.mean(res, axis=0)
+        print(f"RMSE: {res[0]:.3f}, MAE: {res[1]:.3f}, R2: {res[2]:.3f}")
+    #input()
 
 
 
