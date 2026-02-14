@@ -11,6 +11,7 @@ def expr_to_scipy(expr, method, bounds):
         elif c == 'ln': code += 'np.log'
         elif c == '^2': code += '**2'
         elif c == '^3': code += '**3'
+        elif c == 'u-': code += '-'
         elif c[:2] == 'C_':
             code += 'c[' + str(const_counter) + ']'
             const_counter += 1
@@ -34,6 +35,7 @@ def expr_to_tensor(expr):
         elif c == 'ln': code += 'torch.log'
         elif c == '^2': code += '**2'
         elif c == '^3': code += '**3'
+        elif c == 'u-': code += '-'
         elif c[:2] == 'C_':
             code += 'cs1[' + str(const_counter) + ']'
             const_counter += 1
@@ -55,6 +57,7 @@ def expr_to_code(expr):
         elif c == 'ln': code += 'np.log'
         elif c == '^2': code += '**2'
         elif c == '^3': code += '**3'
+        elif c == 'u-': code += '-'
         elif c[:2] == 'C_':
             code += 'cs[' + str(const_counter) + '].item()'
             const_counter += 1
@@ -76,6 +79,7 @@ def scipy_test_evaluation(expr):
         elif c == 'ln': code += 'np.log'
         elif c == '^2': code += '**2'
         elif c == '^3': code += '**3'
+        elif c == 'u-': code += '-'
         elif c[:2] == 'C_':
             code += 'res.x[' + str(const_counter) + ']'
             const_counter += 1
@@ -97,6 +101,7 @@ def torch_test_evaluation(expr):
         elif c == 'ln': code += 'torch.log'
         elif c == '^2': code += '**2'
         elif c == '^3': code += '**3'
+        elif c == 'u-': code += '-'
         elif c[:2] == 'C_':
             code += 'cs1[' + str(const_counter) + '].item()'
             const_counter += 1

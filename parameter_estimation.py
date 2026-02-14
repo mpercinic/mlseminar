@@ -336,7 +336,7 @@ for dataset in datasets:
         print(f"RMSE: {res[0]:.3f}, MAE: {res[1]:.3f}, R2: {res[2]:.3f}")
     #input()
 
-
+input("done")
 
 # TODO: variable parameters: # of instances per equation, # of epochs, starting values for parameters
 
