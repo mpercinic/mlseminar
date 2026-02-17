@@ -22,6 +22,11 @@ for dataset_name in datasets:
             constants.append(float(s))
         else:
             expression.append(s)
+    if datasets[dataset_name]['ground_truth'] == ['exp', '(', 'u-', 'X_0', '^2', '/', '2', ')', '/', 'sqrt', '(', '2',
+                                                  '*', 'pi', ')']:
+        expression = ['exp', '(', 'u-', '(', 'X_0', '^2', ')', '/', 'C_0', ')', '/', 'sqrt', '(', 'C_1', '*', 'C_2', ')']
+    elif datasets[dataset_name]['ground_truth'] == ['(', 'u-', 'X_0', '*', '(', 'X_1', '^2', '*', 'X_1', '^2', ')', '/', '(', '(', '2', '*', '(', '4', '*', 'pi', '*', 'X_4', ')', '^2', ')', '*', '(', 'X_2', '/', '(', '2', '*', 'pi', ')', ')', '^2', ')', '*', '(', '1', '/', 'X_3', '^2', ')', ')']:
+        expression = ['(', 'u-', '(', 'X_0', ')', '*', '(', 'X_1', '^2', '*', 'X_1', '^2', ')', '/', '(', '(', 'C_0', '*', '(', 'C_1', '*', 'C_2', '*', 'X_4', ')', '^2', ')', '*', '(', 'X_2', '/', '(', 'C_3', '*', 'C_4', ')', ')', '^2', ')', '*', '(', 'C_5', '/', 'X_3', '^2', ')', ')']
     datasets[dataset_name]['expression'] = expression
     datasets[dataset_name]['num_constants'] = num_constants
     datasets[dataset_name]['constants'] = constants

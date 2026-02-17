@@ -11,7 +11,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split, GridSearchCV, KFold
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, mean_absolute_percentage_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from load_dataset import datasets
 from parsers import *
 
@@ -151,7 +151,7 @@ def run_optimization(method, bounds):
     print("Test error: " + str(np.mean((rhs - y_test) ** 2)))
     print()'''
     #print(np.isnan(rhs).any())
-    return np.sqrt(mean_squared_error(y_test, rhs)), mean_absolute_error(y_test, rhs), r2_score(y_test, rhs), mean_absolute_percentage_error(y_test, rhs)
+    return np.sqrt(mean_squared_error(y_test, rhs)), mean_absolute_error(y_test, rhs), r2_score(y_test, rhs)
 
 '''def run_comp_graph(x_train, x_test, y_train, y_test, cs):
     x_train = torch.tensor(x_train)
@@ -204,9 +204,8 @@ def run_nn():
     rmse_loss = np.sqrt(evaluate_model(model, test_loader, mean_squared_error))
     mae_loss = evaluate_model(model, test_loader, mean_absolute_error)
     r2_loss = evaluate_model(model, test_loader, r2_score)
-    mape_loss = evaluate_model(model, test_loader, mean_absolute_percentage_error)
 
-    return rmse_loss, mae_loss, r2_loss, mape_loss
+    return rmse_loss, mae_loss, r2_loss
 
 def run_rand_forest():
     '''grid_search = GridSearchCV(RandomForestRegressor(max_features='log2'), param_grid=rand_forest_params, cv=5)
@@ -220,10 +219,10 @@ def run_rand_forest():
     ).rename_axis("kernel")
     print(results_df[["params", "rank_test_score", "mean_test_score", "std_test_score"]].to_string())'''
 
-    rf_model = RandomForestRegressor(max_features='log2', n_estimators=200)
+    rf_model = RandomForestRegressor(max_features='log2', n_estimators=50)
     rf_model.fit(x_train, y_train)
     y_pred = rf_model.predict(x_test)
-    return np.sqrt(mean_squared_error(y_test, y_pred)), mean_absolute_error(y_test, y_pred), r2_score(y_test, y_pred), mean_absolute_percentage_error(y_test, y_pred)
+    return np.sqrt(mean_squared_error(y_test, y_pred)), mean_absolute_error(y_test, y_pred), r2_score(y_test, y_pred)
 
 def run_knn():
     scaler = StandardScaler()
@@ -232,7 +231,7 @@ def run_knn():
     knn_model = KNeighborsRegressor(n_neighbors=5, weights='distance')
     knn_model.fit(x_train_scaled, y_train)
     y_pred = knn_model.predict(x_test_scaled)
-    return np.sqrt(mean_squared_error(y_test, y_pred)), mean_absolute_error(y_test, y_pred), r2_score(y_test, y_pred), mean_absolute_percentage_error(y_test, y_pred)
+    return np.sqrt(mean_squared_error(y_test, y_pred)), mean_absolute_error(y_test, y_pred), r2_score(y_test, y_pred)
 
 np.random.seed(42)
 
@@ -241,15 +240,18 @@ num_epochs_cg = 5000
 test_size = 0.3
 
 rand_forest_params = {
-    'n_estimators': [20, 50, 100, 150, 200],
-    'max_depth': [None, 5, 10, 15],
-    'min_samples_split': [2, 5, 10],
-    'min_samples_leaf': [1, 2, 5],
-    'bootstrap': [True, False]
+    'n_estimators': [50, 100, 200],
+    'max_depth': [None, 5, 10],
+    'min_samples_split': [2, 5],
+    'min_samples_leaf': [1, 2, 5]
 }
 
-invalids = [0] * 6
-results_final = [[], [], [], [], [], []]
+knn_params = {
+    'n_neighbors': [1, 2, 5, 10, 15],
+    'weights': ['distance', 'uniform'],
+}
+
+first = True
 
 for dataset in datasets:
     # data preparation
@@ -267,92 +269,26 @@ for dataset in datasets:
 
     # print(dataset["expression"])
 
-    kf = KFold(n_splits=5, random_state=42, shuffle=True)
-    rf_results = []
-    knn_results = []
-    nm_results = []
-    lbfgsb_results = []
-    slsqp_results = []
-    comp_graph_results = []
-    nn_results = []
-
-    '''grid_search = GridSearchCV(RandomForestRegressor(max_features='log2'), param_grid=rand_forest_params, cv=5)
+    grid_search = GridSearchCV(KNeighborsRegressor(), param_grid=knn_params, cv=5)
     grid_search.fit(dataset["X"], dataset["y"])
-    print("Best Parameters:", grid_search.best_params_)
+    #print("Best Parameters:", grid_search.best_params_)
     #print("Best Estimator:", grid_search.best_estimator_)
     results_df = pd.DataFrame(grid_search.cv_results_)
-    results_df = results_df.sort_values(by=["rank_test_score"])
+    #results_df = results_df.sort_values(by=["rank_test_score"])
     results_df = results_df.set_index(
         results_df["params"].apply(lambda x: "_".join(str(val) for val in x.values()))
     ).rename_axis("kernel")
-    #print(results_df[["params", "rank_test_score", "mean_test_score", "std_test_score"]].to_string())
-    #input()'''
+    #print(results_df[["params", "mean_test_score"]].to_string())
+    if first:
+        means = results_df["mean_test_score"].to_numpy()
+        kernels = results_df["params"].to_numpy()
+        first = False
+    else:
+        means = means + results_df["mean_test_score"].to_numpy()
 
-    first = True
-    for i, (train_index, test_index) in enumerate(kf.split(dataset["X"])):
-        x_train, x_test = dataset["X"][train_index], dataset["X"][test_index]
-        y_train, y_test = dataset["y"][train_index], dataset["y"][test_index]
-
-        rf_results.append(run_rand_forest())
-        knn_results.append(run_knn())
-        #nn_results.append(run_nn())
-        x_train, x_test = np.transpose(x_train), np.transpose(x_test)
-        if first:
-            first = False
-            nm_results.append(run_optimization("'Nelder-Mead'", '[(-5, 5) for _ in range(n_const)]'))
-            lbfgsb_results.append(run_optimization("'L-BFGS-B'", '[(-5, 5) for _ in range(n_const)]'))
-            slsqp_results.append(run_optimization("'SLSQP'", '[(-5, 5) for _ in range(n_const)]'))
-            #comp_graph_results.append(run_comp_graph(x_train, x_test, y_train, y_test, cs))
-
-            x_train = torch.tensor(x_train)
-            y_train = torch.tensor(y_train)
-
-            cs1 = [torch.tensor(c, requires_grad=True) for c in cs]
-            optimizer = optim.Adam(cs1, lr=0.001)
-            for epoch in range(num_epochs_cg):
-                optimizer.zero_grad()
-                #exec('predicted = (x_train[2] + x_train[1]) / (cs1[0] + (x_train[2] * x_train[1]) / (x_train[0] ** 2))', globals())
-                exec(expr_to_tensor(dataset["expression"]), globals())
-                loss = torch.sqrt(torch.mean((predicted - y_train) ** 2))
-                if loss < 1e-12: break
-                #print(loss.item())
-                loss.backward()
-                optimizer.step()
-            # print("Computational graph results:")
-            # print("Values of the parameters: " + str([c.item() for c in cs]))
-            # print("Values of the parameters: " + str([c.item() for c in cs1]))
-            # print("Number of evaluations: " + str(num_epochs_cg))
-            # print("Error: " + str(loss.item()))
-
-            # TODO: add evaluation for test data
-            x_test = torch.tensor(x_test)
-            y_test = torch.tensor(y_test)
-            exec(torch_test_evaluation(dataset["expression"]), globals())
-            try:
-                comp_graph_results.append((np.sqrt(mean_squared_error(y_test, prediction.detach())), mean_absolute_error(y_test, prediction.detach()), r2_score(y_test, prediction.detach()), mean_absolute_percentage_error(y_test, prediction.detach())))
-            except:
-                invalids[-1] += 1
-        break
-
-
-        '''run_optimization()
-        run_comp_graph(x_train, x_test, y_train, y_test)
-        run_nn()'''
-
-    i = 0
-    for res in [rf_results, knn_results, nm_results, lbfgsb_results, slsqp_results, comp_graph_results]:
-        if len(res) == 0:
-            continue
-        res = np.mean(res, axis=0)
-        if res[2] < 0: invalids[i] += 1
-        else:
-            results_final[i].append(res)
-            print(f"RMSE: {res[0]:.3f}, MAE: {res[1]:.3f}, R2: {res[2]:.3f}, MAPE: {res[3]:.3f}")
-        i += 1
-    #input()
-results_final = [np.mean(np.array(res), axis=0) for res in results_final]
-print(results_final)
-print(invalids)
+sort = np.argsort(means)
+kernel_best = kernels[sort[-1]]
+print(kernel_best)
 
 input("done")
 
