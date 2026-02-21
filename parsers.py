@@ -40,7 +40,7 @@ def expr_to_tensor(expr):
             code += 'cs1[' + str(const_counter) + ']'
             const_counter += 1
         elif c[:2] == 'X_':
-            code += 'x_train[' + str(c[2:]) + ']'
+            code += 'x_train_tensor[' + str(c[2:]) + ']'
         else: code += c
     return code
 
@@ -106,7 +106,7 @@ def torch_test_evaluation(expr):
             code += 'cs1[' + str(const_counter) + ']'
             const_counter += 1
         elif c[:2] == 'X_':
-            code += 'x_test[' + str(c[2:]) + ']'
+            code += 'x_test_tensor[' + str(c[2:]) + ']'
         else: code += c
     return code
 

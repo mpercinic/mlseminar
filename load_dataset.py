@@ -32,7 +32,11 @@ for dataset_name in datasets:
     datasets[dataset_name]['constants'] = constants
     datasets[dataset_name]['dataset_name'] = dataset_name
     datasets[dataset_name]['X'] = dataset.X
+    #noise = np.random.uniform(0.95, 1.05, size=dataset.X.shape)
+    #datasets[dataset_name]['X'] = dataset.X * noise
     datasets[dataset_name]['y'] = dataset.y
+    #noise = np.random.uniform(0.95, 1.05, size=dataset.y.shape)
+    #datasets[dataset_name]['y'] = dataset.y * noise
 
 datasets = [datasets[dataset_name] for dataset_name in datasets if datasets[dataset_name]['num_constants'] > 0]
 print("Number of equations with free parameters: " + str(len(datasets)) + '/100')
