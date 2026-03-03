@@ -12,6 +12,7 @@ from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split, GridSearchCV, KFold
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.svm import SVR
 from load_dataset import datasets
 from parsers import *
 
@@ -246,25 +247,32 @@ rand_forest_params = {
     'min_samples_leaf': [1, 2, 5]
 }
 
+svr_params = {
+    'kernel': ['linear', 'rbf'],
+    'C': [2, 5],
+    'epsilon': [0.005, 0.01]
+}
+
 first = True
 
 for dataset in datasets:
     # data preparation
     n_const = dataset["num_constants"]
     c_min, c_max = dataset["kwargs"]["constant_range"]
-    c0_1 = np.random.rand(n_const)
-    cs = [c_min + (c_max - c_min) * c0_1[i] for i in range(n_const)]
+    '''c0_1 = np.random.rand(n_const)
+    cs = [c_min + (c_max - c_min) * c0_1[i] for i in range(n_const)]'''
     #cs = [torch.tensor(c_min + (c_max - c_min) * c0_1[i], requires_grad=True) for i in range(n_const)]
     print(dataset["ground_truth"])
-    exec(expr_to_code(dataset["expression"]))
+    '''exec(expr_to_code(dataset["expression"]))
     while np.isnan(rhs).any():
         c0_1 = np.random.rand(n_const)
         cs = [c_min + (c_max - c_min) * c0_1[i] for i in range(n_const)]
-        exec(expr_to_code(dataset["expression"]))
+        exec(expr_to_code(dataset["expression"]))'''
 
     # print(dataset["expression"])
 
-    grid_search = GridSearchCV(RandomForestRegressor(max_features='log2'), param_grid=rand_forest_params, cv=5)
+    #grid_search = GridSearchCV(RandomForestRegressor(max_features='log2'), param_grid=rand_forest_params, cv=5)
+    grid_search = GridSearchCV(SVR(), param_grid=svr_params, cv=5)
     grid_search.fit(dataset["X"], dataset["y"])
     #print("Best Parameters:", grid_search.best_params_)
     #print("Best Estimator:", grid_search.best_estimator_)
@@ -284,44 +292,3 @@ for dataset in datasets:
 sort = np.argsort(means)
 kernel_best = kernels[sort[-1]]
 print(kernel_best)
-
-input("done")
-
-# TODO: variable parameters: # of instances per equation, # of epochs, starting values for parameters
-
-x1_list = [random.randint(0, 1000) for _ in range(1000)]
-x2_list = [random.randint(0, 1000) for _ in range(1000)]
-y_list  = [62.4*x1_list[i]**2 - 73.7*x2_list[i] for i in range(1000)]
-
-x1 = torch.tensor(x1_list)
-x2 = torch.tensor(x2_list)
-y = torch.tensor(y_list)
-
-
-c = np.random.rand(2)
-c1 = torch.tensor([(10.0- 1e-8)*c[0]-5], requires_grad=True)
-c2 = torch.tensor([(10.0- 1e-8)*c[1]-5], requires_grad=True)
-
-res = minimize(lambda x: np.mean((x[0] * np.array(x1_list) ** 2 - x[1] * np.array(x2_list) - np.array(y_list))**2), [(10.0- 1e-8)*c[0]-5, (10.0- 1e-8)*c[1]-5])
-
-#optimizer = optim.Adam([c1, c2], lr=0.1)
-optimizer = optim.AdamW([c1, c2], lr=0.01)
-
-num_epochs = 20000
-for epoch in range(num_epochs):
-    optimizer.zero_grad()
-
-    predicted = c1 * x1 ** 2 - c2 * x2
-    print(c1.item(), c2.item())
-
-    loss = torch.mean((predicted - y) ** 2)
-    loss.backward()
-    optimizer.step()
-
-print(c1.item(), c2.item())
-
-X = np.stack((np.array(x1_list), np.array(x2_list)), axis=1)
-pe = ParameterEstimator(X, np.array(y_list), seed=42)
-
-# Estimate the parameters of the expression
-print(pe.estimate_parameters(["C", "*", "(", "X_0", ")", "^2", "-", "C", "*", "X_1"]))

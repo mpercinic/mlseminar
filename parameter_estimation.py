@@ -9,6 +9,10 @@ from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split, KFold
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, mean_absolute_percentage_error
+from sklearn.svm import SVR
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.pipeline import make_pipeline
+from scipy.optimize import minimize
 from load_dataset import datasets
 from parsers import *
 
@@ -53,10 +57,26 @@ def run_knn():
     print(mean_absolute_percentage_error(y_test, y_pred))
     return np.sqrt(mean_squared_error(y_test, y_pred)), mean_absolute_error(y_test, y_pred), r2_score(y_test, y_pred), mean_absolute_percentage_error(y_test, y_pred)
 
+def run_svr():
+    svr = make_pipeline(StandardScaler(), SVR(kernel='rbf', C=50, epsilon=0.005))
+    svr.fit(x_train, y_train)
+    y_pred = svr.predict(x_test)
+    return (np.sqrt(mean_squared_error(y_test, y_pred)), mean_absolute_error(y_test, y_pred),
+            r2_score(y_test, y_pred),
+            mean_absolute_percentage_error(y_test, y_pred))
+
+def run_dt():
+    dt = DecisionTreeRegressor()
+    dt.fit(x_train, y_train)
+    y_pred = dt.predict(x_test)
+    return (np.sqrt(mean_squared_error(y_test, y_pred)), mean_absolute_error(y_test, y_pred),
+            r2_score(y_test, y_pred),
+            mean_absolute_percentage_error(y_test, y_pred))
+
 np.random.seed(42)
 
 num_epochs_nn = 1000
-num_epochs_cg = 5000
+num_epochs_cg = 1
 test_size = 0.3
 
 rand_forest_params = {
@@ -67,9 +87,9 @@ rand_forest_params = {
     'bootstrap': [True, False]
 }
 
-invalids = [0] * 6
-results_final = [[], [], [], [], [], []]
-results_time = [[], [], [], [], [], []]
+invalids = [0] * 8
+results_final = [[], [], [], [], [], [], [], []]
+results_time = [[], [], [], [], [], [], [], []]
 
 for dataset in datasets:
     # data preparation
@@ -95,6 +115,8 @@ for dataset in datasets:
     slsqp_results = []
     comp_graph_results = []
     nn_results = []
+    svr_results = []
+    dt_results = []
 
     x_train, x_test, y_train, y_test = train_test_split(dataset["X"], dataset["y"], test_size=0.3, random_state=42, shuffle=True)
 
@@ -106,6 +128,14 @@ for dataset in datasets:
     knn_results.append(run_knn())
     end = time.time()
     results_time[1].append(end - start)
+    start = time.time()
+    svr_results.append(run_svr())
+    end = time.time()
+    results_time[2].append(end - start)
+    start = time.time()
+    dt_results.append(run_dt())
+    end = time.time()
+    results_time[3].append(end - start)
     #nn_results.append(run_nn())
     x_train, x_test = np.transpose(x_train), np.transpose(x_test)
 
@@ -120,17 +150,17 @@ for dataset in datasets:
         nmres = run_optimization("'Nelder-Mead'", '[(-5, 5) for _ in range(n_const)]')
         if nmres[0] < nmmin[0]: nmmin = nmres
         end = time.time()
-        results_time[2].append(end - start)
+        results_time[4].append(end - start)
         start = time.time()
         lbfgsbres = run_optimization("'L-BFGS-B'", '[(-5, 5) for _ in range(n_const)]')
         if lbfgsbres[0] < lbfgsbmin[0]: lbfgsbmin = lbfgsbres
         end = time.time()
-        results_time[3].append(end - start)
+        results_time[5].append(end - start)
         start = time.time()
         slsqpres = run_optimization("'SLSQP'", '[(-5, 5) for _ in range(n_const)]')
         if slsqpres[0] < slsqpmin[0]: slsqpmin = slsqpres
         end = time.time()
-        results_time[4].append(end - start)
+        results_time[6].append(end - start)
         #comp_graph_results.append(run_comp_graph(x_train, x_test, y_train, y_test, cs))
 
         x_train_tensor = torch.tensor(x_train)
@@ -163,7 +193,7 @@ for dataset in datasets:
                 cgmin = (np.sqrt(mean_squared_error(y_test_tensor, prediction.detach())), mean_absolute_error(y_test, prediction.detach()), r2_score(y_test, prediction.detach()), mean_absolute_percentage_error(y_test, prediction.detach()))
             #comp_graph_results.append((np.sqrt(mean_squared_error(y_test, prediction.detach())), mean_absolute_error(y_test, prediction.detach()), r2_score(y_test, prediction.detach()), mean_absolute_percentage_error(y_test, prediction.detach())))
             end = time.time()
-            results_time[5].append(end - start)
+            results_time[7].append(end - start)
         except:
             testvar = 2
             #invalids[-1] += 1
@@ -189,7 +219,7 @@ for dataset in datasets:
     comp_graph_results.append(cgmin)
 
     i = 0
-    for res in [rf_results, knn_results, nm_results, lbfgsb_results, slsqp_results, comp_graph_results]:
+    for res in [rf_results, knn_results, svr_results, dt_results, nm_results, lbfgsb_results, slsqp_results, comp_graph_results]:
         if len(res) == 0:
             continue
         res = np.mean(res, axis=0)
